@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function HomeScreen() {
   const [tasks, setTasks] = useState([]);
+  const [completedTasks, setCompletedTasks] = useState([]);
   const [newTask, setNewTask] = useState('');
   const [editingTask, setEditingTask] = useState(null);
 
@@ -15,17 +16,18 @@ export default function HomeScreen() {
   const loadTasks = async () => {
     try {
       const savedTasks = await AsyncStorage.getItem('tasks');
-      if (savedTasks) {
-        setTasks(JSON.parse(savedTasks));
-      }
+      const savedCompletedTasks = await AsyncStorage.getItem('completedTasks');
+      if (savedTasks) setTasks(JSON.parse(savedTasks));
+      if (savedCompletedTasks) setCompletedTasks(JSON.parse(savedCompletedTasks));
     } catch (error) {
       console.error(error);
     }
   };
 
-  const saveTasks = async (tasks) => {
+  const saveTasks = async (tasks, completedTasks) => {
     try {
       await AsyncStorage.setItem('tasks', JSON.stringify(tasks));
+      await AsyncStorage.setItem('completedTasks', JSON.stringify(completedTasks));
     } catch (error) {
       console.error(error);
     }
@@ -39,7 +41,7 @@ export default function HomeScreen() {
     const newTasks = [...tasks, { id: Date.now().toString(), text: newTask, completed: false }];
     setTasks(newTasks);
     setNewTask('');
-    saveTasks(newTasks);
+    saveTasks(newTasks, completedTasks);
   };
 
   const editTask = (task) => {
@@ -52,7 +54,7 @@ export default function HomeScreen() {
     setTasks(updatedTasks);
     setNewTask('');
     setEditingTask(null);
-    saveTasks(updatedTasks);
+    saveTasks(updatedTasks, completedTasks);
   };
 
   const deleteTask = (taskId) => {
@@ -63,18 +65,25 @@ export default function HomeScreen() {
         onPress: () => {
           const remainingTasks = tasks.filter((task) => task.id !== taskId);
           setTasks(remainingTasks);
-          saveTasks(remainingTasks);
+          saveTasks(remainingTasks, completedTasks);
         },
       },
     ]);
   };
 
-  const markTaskAsCompleted = (taskId) => {
-    const updatedTasks = tasks.map((task) =>
-      task.id === taskId ? { ...task, completed: !task.completed } : task
-    );
+  const deleteCompletedTask = (taskId) => {
+    const remainingCompletedTasks = completedTasks.filter((task) => task.id !== taskId);
+    setCompletedTasks(remainingCompletedTasks);
+    saveTasks(tasks, remainingCompletedTasks);
+  };
+
+  const markTaskAsDone = (taskId) => {
+    const updatedTasks = tasks.filter((task) => task.id !== taskId);
+    const doneTask = tasks.find((task) => task.id === taskId);
+    const updatedCompletedTasks = [...completedTasks, { ...doneTask, completed: true }];
     setTasks(updatedTasks);
-    saveTasks(updatedTasks);
+    setCompletedTasks(updatedCompletedTasks);
+    saveTasks(updatedTasks, updatedCompletedTasks);
   };
 
   return (
@@ -93,21 +102,39 @@ export default function HomeScreen() {
       {tasks.length === 0 ? (
         <Text style={styles.noTasks}>No tasks available</Text>
       ) : (
-        <FlatList
-          data={tasks}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View style={styles.taskContainer}>
-              <TouchableOpacity onPress={() => markTaskAsCompleted(item.id)}>
-                <Text style={[styles.taskText, item.completed && styles.completedTask]}>
-                  {item.text}
-                </Text>
-              </TouchableOpacity>
-              <Button title="Edit" onPress={() => editTask(item)} />
-              <Button title="Delete" color="red" onPress={() => deleteTask(item.id)} />
-            </View>
-          )}
-        />
+        <>
+          <Text style={styles.subHeading}>Active Tasks</Text>
+          <FlatList
+            data={tasks}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <View style={styles.taskContainer}>
+                <TouchableOpacity onPress={() => markTaskAsDone(item.id)}>
+                  <Text style={styles.taskText}>{item.text}</Text>
+                </TouchableOpacity>
+                <Button title="Edit" onPress={() => editTask(item)} />
+                <Button title="Delete" color="red" onPress={() => deleteTask(item.id)} />
+                <Button title="Done" color="green" onPress={() => markTaskAsDone(item.id)} />
+              </View>
+            )}
+          />
+        </>
+      )}
+
+      {completedTasks.length > 0 && (
+        <>
+          <Text style={styles.subHeading}>Done Tasks</Text>
+          <FlatList
+            data={completedTasks}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <View style={styles.taskContainer}>
+                <Text style={[styles.taskText, styles.completedTask]}>{item.text}</Text>
+                <Button title="Delete" color="red" onPress={() => deleteCompletedTask(item.id)} />
+              </View>
+            )}
+          />
+        </>
       )}
     </View>
   );
@@ -122,6 +149,11 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 10,
+  },
+  subHeading: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginVertical: 10,
   },
   input: {
     borderWidth: 1,
